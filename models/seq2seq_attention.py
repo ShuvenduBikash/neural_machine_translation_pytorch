@@ -31,7 +31,7 @@ def sequence_mask(sequence_length, max_len=None):
     if sequence_length.is_cuda:
         seq_range_expand = seq_range_expand.cuda()
     seq_length_expand = (sequence_length.unsqueeze(1)
-        .expand_as(seq_range_expand))
+                         .expand_as(seq_range_expand))
     return seq_range_expand < seq_length_expand
 
 
@@ -106,6 +106,18 @@ def read_langs(filename, lang1, lang2, reverse=False):
     return input_lang, output_lang, pairs
 
 
+def filter_pairs(pairs):
+    MIN_LENGTH = 3
+    MAX_LENGTH = 25
+
+    filtered_pairs = []
+    for pair in pairs:
+        if MIN_LENGTH <= len(pair[0]) <= MAX_LENGTH \
+                and MIN_LENGTH <= len(pair[1]) <= MAX_LENGTH:
+            filtered_pairs.append(pair)
+    return filtered_pairs
+
+
 def prepare_data(filename, lang1_name, lang2_name, reverse=False):
     input_lang, output_lang, pairs = read_langs(filename, lang1_name, lang2_name, reverse)
     print("Read %d sentence pairs" % len(pairs))
@@ -122,19 +134,84 @@ def prepare_data(filename, lang1_name, lang2_name, reverse=False):
     return input_lang, output_lang, pairs
 
 
-def filter_pairs(pairs):
-    MIN_LENGTH = 3
-    MAX_LENGTH = 25
+# Return a list of indexes, one for each word in the sentence, plus EOS
+def indexes_from_sentence(lang, sentence):
+    EOS_token = 2
+    return [lang.word2index[word] for word in sentence.split(' ')] + [EOS_token]
 
-    filtered_pairs = []
-    for pair in pairs:
-        if MIN_LENGTH <= len(pair[0]) <= MAX_LENGTH \
-                and MIN_LENGTH <= len(pair[1]) <= MAX_LENGTH:
-            filtered_pairs.append(pair)
-    return filtered_pairs
+
+# Pad a with the PAD symbol
+def pad_seq(seq, max_length):
+    PAD_token = 0
+    seq += [PAD_token for i in range(max_length - len(seq))]
+    return seq
+
+
+def random_batch(batch_size):
+    input_seqs = []
+    target_seqs = []
+
+    # Choose random pairs
+    for i in range(batch_size):
+        pair = random.choice(pairs)
+        input_seqs.append(indexes_from_sentence(input_lang, pair[0]))
+        target_seqs.append(indexes_from_sentence(output_lang, pair[1]))
+
+    # Zip into pairs, sort by length (descending), unzip
+    seq_pairs = sorted(zip(input_seqs, target_seqs), key=lambda p: len(p[0]), reverse=True)
+    input_seqs, target_seqs = zip(*seq_pairs)
+
+    # For input and target sequences, get array of lengths and pad with 0s to max length
+    input_lengths = [len(s) for s in input_seqs]
+    input_padded = [pad_seq(s, max(input_lengths)) for s in input_seqs]
+    target_lengths = [len(s) for s in target_seqs]
+    target_padded = [pad_seq(s, max(target_lengths)) for s in target_seqs]
+
+    # Turn padded arrays into (batch_size x max_len) tensors, transpose into (max_len x batch_size)
+    input_var = Variable(torch.LongTensor(input_padded)).transpose(0, 1)
+    target_var = Variable(torch.LongTensor(target_padded)).transpose(0, 1)
+
+    if USE_CUDA:
+        input_var = input_var.cuda()
+        target_var = target_var.cuda()
+
+    return input_var, input_lengths, target_var, target_lengths
 
 
 if __name__ == '__main__':
     USE_CUDA = True
     input_lang, output_lang, pairs = prepare_data('/media/shuvendu/Projects/Datasets/NMT/fra.txt', 'eng', 'fra', True)
+
+    MIN_COUNT = 5
+
+    input_lang.trim(MIN_COUNT)
+    output_lang.trim(MIN_COUNT)
+
+    keep_pairs = []
+
+    for pair in pairs:
+        input_sentence = pair[0]
+        output_sentence = pair[1]
+        keep_input = True
+        keep_output = True
+
+        for word in input_sentence.split(' '):
+            if word not in input_lang.word2index:
+                keep_input = False
+                break
+
+        for word in output_sentence.split(' '):
+            if word not in output_lang.word2index:
+                keep_output = False
+                break
+
+        # Remove if pair doesn't match input and output conditions
+        if keep_input and keep_output:
+            keep_pairs.append(pair)
+
+    print("Trimmed from %d pairs to %d, %.4f of total" % (len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
+    pairs = keep_pairs
+
+
+
 
