@@ -1,2 +1,2 @@
-# Neural Machine Translation - Pytorch
+# Neural Machine Translation - PyTorch
 
