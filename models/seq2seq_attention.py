@@ -106,8 +106,8 @@ def read_langs(filename, lang1, lang2, reverse=False):
     return input_lang, output_lang, pairs
 
 
-def prepare_data(lang1_name, lang2_name, reverse=False):
-    input_lang, output_lang, pairs = read_langs(lang1_name, lang2_name, reverse)
+def prepare_data(filename, lang1_name, lang2_name, reverse=False):
+    input_lang, output_lang, pairs = read_langs(filename, lang1_name, lang2_name, reverse)
     print("Read %d sentence pairs" % len(pairs))
 
     pairs = filter_pairs(pairs)
@@ -136,4 +136,5 @@ def filter_pairs(pairs):
 
 if __name__ == '__main__':
     USE_CUDA = True
+    input_lang, output_lang, pairs = prepare_data('/media/shuvendu/Projects/Datasets/NMT/fra.txt', 'eng', 'fra', True)
 
