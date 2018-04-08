@@ -18,6 +18,7 @@ from torch import optim
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 from utils.Lang import Lang
+from models.attention_model.encoder_decoder import *
 
 
 # Helper functions
@@ -89,7 +90,8 @@ def normalize_string(s):
 def read_langs(filename, lang1, lang2, reverse=False):
     print("Reading lines...")
 
-    lines = open(filename).read().strip().split('\n')
+    import io
+    lines = io.open(filename, mode="r", encoding="utf-8").read().strip().split('\n')
 
     # Split every line into pairs and normalize
     pairs = [[normalize_string(s) for s in l.split('\t')] for l in lines]
@@ -179,8 +181,8 @@ def random_batch(batch_size):
 
 
 if __name__ == '__main__':
-    USE_CUDA = True
-    input_lang, output_lang, pairs = prepare_data('/media/shuvendu/Projects/Datasets/NMT/fra.txt', 'eng', 'fra', True)
+    USE_CUDA = torch.cuda.is_available()
+    input_lang, output_lang, pairs = prepare_data('E:\\Datasets\\NMT\\fra.txt', 'eng', 'fra', True)
 
     MIN_COUNT = 5
 
@@ -212,6 +214,29 @@ if __name__ == '__main__':
     print("Trimmed from %d pairs to %d, %.4f of total" % (len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
     pairs = keep_pairs
 
+    # Test the model
+    print("\n---------------------")
+    print("Testing the model....")
+    small_batch_size = 3
+    input_batches, input_lengths, target_batches, target_lengths = random_batch(small_batch_size)
+
+    print('input_batches', input_batches.size())  # (max_len x batch_size)
+    print('target_batches', target_batches.size())  # (max_len x batch_size)
+
+    small_hidden_size = 8
+    small_n_layers = 2
+
+    encoder_test = EncoderRNN(input_lang.n_words, small_hidden_size, small_n_layers)
+    decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
+
+    if USE_CUDA:
+        encoder_test.cuda()
+        decoder_test.cuda()
+
+    encoder_outputs, encoder_hidden = encoder_test(input_batches, input_lengths, None)
+
+    print('encoder_outputs', encoder_outputs.size())  # max_len x batch_size x hidden_size
+    print('encoder_hidden', encoder_hidden.size())  # n_layers * 2 x batch_size x hidden_size
 
 
 
